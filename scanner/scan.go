@@ -22,37 +22,47 @@ func checkReferences(line string, lineNum int, filePath string) {
 // Scan a line of code and detect secrets
 func scanLine(line string, lineNum int, filePath string) {
 	// Check for string literals (either "..." or '...')
-	parts := strings.Split(line, "=")
+	var parts []string
+	if strings.Contains(line, "=") {
+		parts = strings.Split(line, "=")
+	} else if strings.Contains(line, ":=") {
+		parts = strings.Split(line, ":=")
+	}
+
 	if len(parts) > 1 {
-		// Only parse the identifier if the value looks like a string
-		value := strings.Trim(strings.TrimSpace(parts[1]), `;`)
-
-		// If the value is a string literal, then extract the identifier
-		if strings.HasPrefix(value, `"`) || strings.HasPrefix(value, `'`) {
-			variable := parseIdentifier(parts[0])
-			// Check if the value matches any of the patterns (secrets)
-			for _, pattern := range patterns {
-				if pattern.MatchString(value) {
-					secretVariableMap[variable] = SecretData{Value: value, FilePath: filePath, LineNum: lineNum}
-					utils.PURPLE.Print("Potential secret in ")
-					utils.CYAN.Printf(linePos, filePath, lineNum)
-					fmt.Println(utils.RED.Sprintf("%s", value))
-					return
-				}
-			}
-
-			// Check for high-entropy strings if no regex match
-			if isPotentialSecret(value) {
-				secretVariableMap[variable] = SecretData{Value: value, FilePath: filePath, LineNum: lineNum}
-				utils.PURPLE.Print("High-entropy string in ")
-				utils.GREY.Printf(linePos, filePath, lineNum)
-				fmt.Println(utils.RED.Sprintf("%s", value))
-			}
-		}
+		checkDeclaration(parts, lineNum, filePath)
 	}
 
 	// Check for references to known secret variables
 	checkReferences(line, lineNum, filePath)
+}
+
+func checkDeclaration(parts []string, lineNum int, filePath string) {
+	// Only parse the identifier if the value looks like a string
+	value := strings.Trim(strings.TrimSpace(parts[1]), `;`)
+
+	// If the value is a string literal, then extract the identifier
+	if strings.HasPrefix(value, `"`) || strings.HasPrefix(value, `'`) {
+		variable := parseIdentifier(parts[0])
+		// Check if the value matches any of the patterns (secrets)
+		for _, pattern := range patterns {
+			if pattern.MatchString(value) {
+				secretVariableMap[variable] = SecretData{Value: value, FilePath: filePath, LineNum: lineNum}
+				utils.PURPLE.Print("Potential secret in ")
+				utils.CYAN.Printf(linePos, filePath, lineNum)
+				fmt.Println(utils.RED.Sprintf("%s", value))
+				return
+			}
+		}
+
+		// Check for high-entropy strings if no regex match
+		if isPotentialSecret(value) {
+			secretVariableMap[variable] = SecretData{Value: value, FilePath: filePath, LineNum: lineNum}
+			utils.PURPLE.Print("High-entropy string in ")
+			utils.GREY.Printf(linePos, filePath, lineNum)
+			fmt.Println(utils.RED.Sprintf("%s", value))
+		}
+	}
 }
 
 func scanFile(filePath string) {
@@ -90,5 +100,5 @@ func ScanFiles(files []string) {
 		utils.GREEN.Println("No potential secrets found.")
 		return
 	}
-	fmt.Printf("\nFound %d potential secrets\n", len(secretVariableMap))
+	utils.RED.Printf("\nFound %d potential secrets\n", len(secretVariableMap))
 }
