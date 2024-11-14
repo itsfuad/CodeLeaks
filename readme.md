@@ -35,6 +35,8 @@ Usage
         Comma-separated list of extensions to scan (e.g., .go,.py)
 ```
 
+![Cover](./cover.png)
+
 ## Contact
 
 For any questions or feedback, please open an issue on our [GitHub repository](https://github.com/itsfuad/CodeLeaks).
