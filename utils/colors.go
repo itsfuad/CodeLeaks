@@ -35,6 +35,12 @@ func (c COLOR) Println(a ...interface{}) {
 	fmt.Print(RESET.String())
 }
 
+func (c COLOR) Print(a ...interface{}) {
+	fmt.Print(c.String())
+	fmt.Print(a...)
+	fmt.Print(RESET.String())
+}
+
 func ColorPrint(color COLOR, a ...interface{}) {
 	fmt.Print(color.String())
 	fmt.Print(a...)

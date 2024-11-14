@@ -1,123 +1,163 @@
 package main
 
 import (
-    "bufio"
-    "fmt"
-    "math"
-    "os"
-    "regexp"
-    "strings"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
-	"codeleaks/utils"
+	"codeleaks/scanner"
 )
 
-// Map to store variables identified as secrets
-var secretVariableMap = make(map[string]string)
+// parseCLI parses the command-line flags and arguments
+func parseCLI() ([]string, []string, error) {
+	// Define CLI flags
+	dirname := flag.String("d", "", "Directory to scan (required)")
+	onlyScanFiles := flag.String("o", "", "Comma-separated list of files to scan (e.g., file1.txt,file2.txt)")
+	onlyScanExts := flag.String("x", "", "Comma-separated list of extensions to scan (e.g., .go,.py)")
+	excludeFiles := flag.String("e", "", "Comma-separated list of files to exclude (e.g., file1.txt,file2.txt)")
+	excludeExts := flag.String("ex", "", "Comma-separated list of extensions to exclude (e.g., .go,.py)")
+	help := flag.Bool("h", false, "Show usage information")
+	flag.Parse()
 
-var linePos = "%s:%d: "
-
-var patterns = []*regexp.Regexp{
-    regexp.MustCompile(`(?i)(aws_access_key_id|aws_secret_access_key|api_key|token|secret|password)[^\n]*`),
-    regexp.MustCompile(`[A-Za-z0-9-_]{20,40}`),
-    regexp.MustCompile(`[A-Fa-f0-9]{32,64}`),
-    regexp.MustCompile(`[A-Za-z0-9-_]{32}\.[A-Za-z0-9-_]{6,}\.[A-Za-z0-9-_]{27,}`),
-}
-
-const entropyThreshold = 4.5
-
-func parseIdentifier(str string) string {
-	// If has '=', we take the left side
-	if strings.Contains(str, "=") {
-		str = strings.Split(str, "=")[0]
+	if *help {
+		flag.Usage() // Show help message
+		os.Exit(0)
 	}
-	// First character must be a letter or an underscore, followed by any number of letters, digits, or underscores
-	identifier := regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*`)
-	return identifier.FindString(str)
+
+	// Validate that the directory is specified
+	if *dirname == "" {
+		return nil, nil, fmt.Errorf("the -d flag (directory) is required")
+	}
+
+	// Parse exclude extensions if provided
+	var exclude []string
+	if *excludeExts != "" {
+		exclude = strings.Split(*excludeExts, ",")
+		// Trim spaces from the extensions
+		for i, ext := range exclude {
+			exclude[i] = strings.TrimSpace(ext)
+		}
+	}
+
+	// Parse include files if provided
+	var filesToScan []string
+	if *onlyScanFiles != "" {
+		filesToScan = strings.Split(*onlyScanFiles, ",")
+		// Trim spaces from the filenames
+		for i, file := range filesToScan {
+			filesToScan[i] = strings.TrimSpace(file)
+		}
+	}
+
+	// Parse include extensions if provided
+	var extToScan []string
+	if *onlyScanExts != "" {
+		extToScan = strings.Split(*onlyScanExts, ",")
+		// Trim spaces from the extensions
+		for i, ext := range extToScan {
+			extToScan[i] = strings.TrimSpace(ext)
+		}
+	}
+
+	// Find all files in the directory
+	var files []string
+	err := addToFiles(&files, *dirname, exclude, filesToScan, extToScan, excludeFiles)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return files, exclude, nil
 }
 
-func calculateEntropy(str string) float64 {
-    freq := make(map[rune]float64)
-    for _, char := range str {
-        freq[char]++
-    }
-    entropy := 0.0
-    for _, count := range freq {
-        p := count / float64(len(str))
-        entropy -= p * math.Log2(p)
-    }
-    return entropy
+func checkExclusion(path string, excludeFiles *string) error {
+	if *excludeFiles != "" {
+		filesToExclude := strings.Split(*excludeFiles, ",")
+		for _, excludeFile := range filesToExclude {
+			if strings.Contains(path, excludeFile) {
+				return nil
+			}
+		}
+	}
+	return nil
 }
 
-func isPotentialSecret(word string) bool {
-    return len(word) > 8 && calculateEntropy(word) > entropyThreshold
+func checkFile(path string, files *[]string, filesToScan []string, extToScan []string, ext string) error {
+	if len(filesToScan) > 0 {
+		for _, file := range filesToScan {
+			if strings.Contains(path, file) {
+				*files = append(*files, path)
+				return nil
+			}
+		}
+	} else if len(extToScan) > 0 {
+		for _, ext2s := range extToScan {
+			if ext2s == ext {
+				*files = append(*files, path)
+				return nil
+			}
+		}
+	} else {
+		// Add the file to the list if it matches no exclusion
+		*files = append(*files, path)
+	}
+	return nil
 }
 
-// Store secrets in a map if identified as sensitive
-func scanLine(line string, lineNum int, filePath string) {
-	parts := strings.Split(line, "=")
-	if len(parts) > 1 {
-		variable := parseIdentifier(parts[0])
-		value := strings.TrimSpace(parts[1])
+func addToFiles(files *[]string, dirname string, exclude []string, filesToScan []string, extToScan []string, excludeFiles *string) error {
+	err := filepath.Walk(dirname, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		// Skip directories
+		if info.IsDir() {
+			return nil
+		}
 
-		// Check regex patterns for secrets
-		for _, pattern := range patterns {
-			if pattern.MatchString(value) {
-				secretVariableMap[variable] = value
-				fmt.Print("Potential secret in ")
-				utils.CYAN.Printf(linePos, filePath, lineNum)
-				fmt.Println(utils.RED.Sprintf("%s", value))
-				return
+		// Check if file should be excluded based on filename
+		err = checkExclusion(path, excludeFiles)
+		if err != nil {
+			return nil
+		}
+
+		// Check if file has an extension that needs to be excluded
+		ext := filepath.Ext(path)
+		for _, excludeExt := range exclude {
+			if ext == excludeExt {
+				return nil
 			}
 		}
 
-		// Check entropy if not matched by regex
-		if isPotentialSecret(value) {
-			secretVariableMap[variable] = value
-			fmt.Print("High-entropy string in ")
-			utils.GREY.Printf(linePos, filePath, lineNum)
-			fmt.Println(utils.RED.Sprintf("%s", value))
+		// If only files are specified, check if the file should be scanned
+		err = checkFile(path, files, filesToScan, extToScan, ext)
+		if err != nil {
+			return nil
 		}
-	}
 
-	fmt.Printf("Found %d secrets in %s\n", len(secretVariableMap), filePath)
-	fmt.Printf("Checking for secrets in %s\n", line)
-
-	// Check if line references any known secret variables
-	for varName := range secretVariableMap {
-		fmt.Printf("Checking for '%s' in '%s'\n", varName, line)
-		if strings.Contains(line, varName) {
-			fmt.Print("Secret reference in ")
-			utils.GREY.Printf(linePos, filePath, lineNum)
-			fmt.Println(utils.BLUE.Sprintf("%s", line))
-		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("error walking the directory: %w", err)
 	}
+	return nil
 }
 
-func scanFile(filePath string) {
-    file, err := os.Open(filePath)
-    if err != nil {
-        fmt.Println("Error opening file:", err)
-        return
-    }
-    defer file.Close()
-
-    scanner := bufio.NewScanner(file)
-    lineNum := 1
-    for scanner.Scan() {
-        line := strings.TrimSpace(scanner.Text())
-        if !strings.HasPrefix(line, "//") && !strings.HasPrefix(line, "#") {
-            scanLine(line, lineNum, filePath)
-        }
-        lineNum++
-    }
-    if err := scanner.Err(); err != nil {
-        fmt.Println("Error reading file:", err)
-    }
-}
-
+// main is the entry point for the program
 func main() {
-    files := []string{"tests/app.js", "tests/app2.js"} // Replace with your files
-    for _, file := range files {
-        scanFile(file)
-    }
+	// Parse CLI flags
+	files, exclude, err := parseCLI()
+	if err != nil {
+		// If an error occurs, print the error and show usage
+		fmt.Println("Error:", err)
+		flag.Usage() // Show help message
+		return
+	}
+
+	// Print the list of files and extensions to exclude
+	fmt.Println("Files to scan:", files)
+	fmt.Println("Excluded extensions:", exclude)
+
+	// Call the scanner to scan the files
+	scanner.ScanFiles(files)
 }
