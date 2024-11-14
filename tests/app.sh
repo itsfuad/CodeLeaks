@@ -1,0 +1,16 @@
+# Bash example with various secrets
+
+# AWS Access Key
+export AWS_ACCESS_KEY_ID="AKIAIOSFODNN7EXAMPLE"
+
+# Generic API Key
+export API_KEY="AIzaSyDqkBEXAMPLEEXAMPLEEXAMPLEEXAMPLE"
+
+# JWT Token
+JWT_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.DuZbVfQtZ7sEXAMPLEEXAMPLEEXAMPLEEXAMPLE"
+
+# Password
+DB_PASSWORD="password123"
+
+# High-entropy token
+GITHUB_TOKEN="ghp_aBCdEFgHiJKlmNOPqrSTUVWXyZ12345"
