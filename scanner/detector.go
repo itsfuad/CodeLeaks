@@ -16,7 +16,7 @@ var secretVariableMap = make(map[string]SecretData)
 var linePos = "%s:%d: "
 
 var patterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)(aws_access_key_id|aws_secret_access_key|api_key|token|secret|password)[^\n]*`),
+	regexp.MustCompile(`(?i)(aws_access_key_id|aws_secret_access_key|api_key|token|secret|password|apikey)[^\n]*`),
 	regexp.MustCompile(`[A-Za-z0-9-_]{20,40}`),
 	regexp.MustCompile(`[A-Fa-f0-9]{32,64}`),
 	regexp.MustCompile(`[A-Za-z0-9-_]{32}\.[A-Za-z0-9-_]{6,}\.[A-Za-z0-9-_]{27,}`),

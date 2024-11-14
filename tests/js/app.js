@@ -13,6 +13,8 @@ const DB_PASSWORD = "super_secret_password";
 // Secret with high entropy
 const PRIVATE_TOKEN = "ghp_aBCdEFgHiJKlmNOPqrSTUVWXyZ12345";
 
+const password = process.env.PASSWORD || "default_password";
+
 //noraml string
 const normalString = "Hello World";
 

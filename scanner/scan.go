@@ -37,7 +37,7 @@ func scanLine(line string, lineNum int, filePath string) {
 	checkReferences(line, lineNum, filePath)
 }
 
-func checkDeclaration(parts []string, lineNum int, filePath string) {
+func checkDeclaration(parts []string, lineNum int, filePath string) bool {
 	// Only parse the identifier if the value looks like a string
 	value := strings.Trim(strings.TrimSpace(parts[1]), `;`)
 
@@ -51,7 +51,7 @@ func checkDeclaration(parts []string, lineNum int, filePath string) {
 				utils.PURPLE.Print("Potential secret in ")
 				utils.CYAN.Printf(linePos, filePath, lineNum)
 				fmt.Println(utils.RED.Sprintf("%s", value))
-				return
+				return true
 			}
 		}
 
@@ -61,8 +61,10 @@ func checkDeclaration(parts []string, lineNum int, filePath string) {
 			utils.PURPLE.Print("High-entropy string in ")
 			utils.GREY.Printf(linePos, filePath, lineNum)
 			fmt.Println(utils.RED.Sprintf("%s", value))
+			return true
 		}
 	}
+	return false
 }
 
 func scanFile(filePath string) {
